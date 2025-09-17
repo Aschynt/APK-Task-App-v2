@@ -1,8 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.google.gms.google.services)
-    //alias(libs.plugins.google.gms.google.services)
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -58,12 +57,6 @@ dependencies {
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.googleid)
-
-    // Optional Google Identity support
-//    implementation(libs.androidx.credentials)
-//    implementation(libs.androidx.credentials.play.services.auth)
-//    implementation(libs.googleid)
-//    implementation(libs.firebase.database)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
