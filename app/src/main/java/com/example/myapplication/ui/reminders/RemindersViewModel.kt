@@ -1,13 +1,13 @@
-package com.example.myapplication.ui.slideshow
+package com.example.myapplication.ui.reminders
 
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 
-class SlideshowViewModel : ViewModel() {
+class RemindersViewModel : ViewModel() {
 
     private val _text = MutableLiveData<String>().apply {
-        value = "This is slideshow Fragment"
+        value = "This is reminders Fragment"
     }
     val text: LiveData<String> = _text
 }
