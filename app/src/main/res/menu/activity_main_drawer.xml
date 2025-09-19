@@ -9,11 +9,11 @@
             android:icon="@drawable/ic_menu_camera"
             android:title="Home" />
         <item
-            android:id="@+id/nav_gallery"
+            android:id="@+id/nav_tasks"
             android:icon="@drawable/ic_menu_gallery"
             android:title="Tasks" />
         <item
-            android:id="@+id/nav_slideshow"
+            android:id="@+id/nav_reminders"
             android:icon="@drawable/ic_menu_slideshow"
             android:title="Reminders" />
     </group>

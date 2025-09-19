@@ -7,11 +7,11 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
-import com.example.myapplication.databinding.FragmentSlideshowBinding
+import com.example.myapplication.databinding.FragmentRemindersBinding
 
 class RemindersFragment : Fragment() {
 
-    private var _binding: FragmentSlideshowBinding? = null
+    private var _binding: FragmentRemindersBinding? = null
 
     // This property is only valid between onCreateView and
     // onDestroyView.
@@ -25,10 +25,10 @@ class RemindersFragment : Fragment() {
         val slideshowViewModel =
             ViewModelProvider(this).get(RemindersViewModel::class.java)
 
-        _binding = FragmentSlideshowBinding.inflate(inflater, container, false)
+        _binding = FragmentRemindersBinding.inflate(inflater, container, false)
         val root: View = binding.root
 
-        val textView: TextView = binding.textSlideshow
+        val textView: TextView = binding.textReminders
         slideshowViewModel.text.observe(viewLifecycleOwner) {
             textView.text = it
         }
