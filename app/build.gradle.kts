@@ -50,13 +50,21 @@ dependencies {
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.androidx.navigation.ui.ktx)
 
-    // Firebase Auth + Firestore
+    // Firebase BOM - ensures compatible versions
+    implementation(platform("com.google.firebase:firebase-bom:34.3.0"))
+
+    // Firebase Auth + Firestore (versions managed by BOM)
     implementation("com.google.firebase:firebase-auth-ktx:23.2.1")
     implementation("com.google.firebase:firebase-firestore-ktx:25.1.4")
+
+    // Firebase Auth + Firestore
     implementation(libs.firebase.auth)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.googleid)
+
+    // Coroutines for async operations
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
