@@ -31,6 +31,14 @@
             android:theme="@style/Theme.MyApplication.NoActionBar" />
 
         <activity android:name=".ui.settings.SettingsActivity" android:exported="true" />
+
+        <!-- Add/Edit Task Activity -->
+        <activity
+            android:name=".ui.tasks.AddEditTaskActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.MyApplication.NoActionBar" />
+
     </application>
 
 </manifest>
