@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -114,6 +115,10 @@ class TasksFragment : Fragment() {
         tasksViewModel.error.observe(viewLifecycleOwner) { error ->
             if (error != null) {
                 showErrorState(error)
+                // Also show toast for delete errors
+                if (error.contains("delete", ignoreCase = true)) {
+                    Toast.makeText(requireContext(), "Failed to delete task: $error", Toast.LENGTH_LONG).show()
+                }
                 tasksViewModel.clearError()
             } else {
                 binding.layoutErrorState.visibility = View.GONE
@@ -162,10 +167,39 @@ class TasksFragment : Fragment() {
     }
 
     private fun onTaskLongClick(task: Task): Boolean {
-        // TODO: Show context menu (edit, delete options)
-        // This will be implemented in Step 7 (Task Deletion)
-        Toast.makeText(requireContext(), "Long press: ${task.name}", Toast.LENGTH_SHORT).show()
+        // Show context menu with delete option
+        showTaskContextMenu(task)
         return true
+    }
+
+    private fun showTaskContextMenu(task: Task) {
+        val options = arrayOf("Edit Task", "Delete Task")
+
+        AlertDialog.Builder(requireContext())
+            .setTitle(task.name)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> onTaskClick(task) // Edit task
+                    1 -> confirmDeleteTask(task) // Delete task
+                }
+            }
+            .show()
+    }
+
+    private fun confirmDeleteTask(task: Task) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Delete Task")
+            .setMessage("Are you sure you want to delete \"${task.name}\"?\n\nThis action cannot be undone.")
+            .setPositiveButton("Delete") { _, _ ->
+                deleteTask(task)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun deleteTask(task: Task) {
+        tasksViewModel.deleteTask(task.id)
+        Toast.makeText(requireContext(), "Task \"${task.name}\" deleted", Toast.LENGTH_SHORT).show()
     }
 
     // Public method to be called from MainActivity FAB
