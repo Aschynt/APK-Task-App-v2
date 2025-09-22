@@ -15,20 +15,28 @@ class TaskRepository {
     private val auth = FirebaseAuth.getInstance()
 
     private fun getCurrentUserId(): String {
-        return auth.currentUser?.uid ?: throw IllegalStateException("User not authenticated")
+        val uid = auth.currentUser?.uid
+        android.util.Log.d("TaskRepository", "Current user ID: $uid")
+        return uid ?: throw IllegalStateException("User not authenticated")
     }
 
     private fun getUserTasksCollection() = db.collection("users")
         .document(getCurrentUserId())
-        .collection("tasks")
+        .collection("tasks").also {
+            android.util.Log.d("TaskRepository", "Query path: users/${getCurrentUserId()}/tasks")
+        }
 
     // CREATE - Add new task
     suspend fun createTask(request: CreateTaskRequest): Result<String> {
         return try {
             val task = request.toTask()
+            android.util.Log.d("TaskRepository", "Creating task: ${task.name} for user: ${task.userId}")
+            android.util.Log.d("TaskRepository", "Task details - due: ${task.dueDate}, created: ${task.createdDate}")
             val docRef = getUserTasksCollection().add(task).await()
+            android.util.Log.d("TaskRepository", "Task created with ID: ${docRef.id}")
             Result.success(docRef.id)
         } catch (e: Exception) {
+            android.util.Log.e("TaskRepository", "Failed to create task", e)
             Result.failure(e)
         }
     }
@@ -37,13 +45,20 @@ class TaskRepository {
     suspend fun getAllTasks(): Result<List<Task>> {
         return try {
             val snapshot = getUserTasksCollection()
-                .orderBy("due_date", Query.Direction.ASCENDING)
+                .orderBy("dueDate", Query.Direction.ASCENDING)
                 .get()
                 .await()
 
+            android.util.Log.d("TaskRepository", "Raw documents received: ${snapshot.documents.size}")
+            snapshot.documents.forEach { doc ->
+                android.util.Log.d("TaskRepository", "Document ${doc.id}: ${doc.data}")
+            }
+
             val tasks = snapshot.toObjects(Task::class.java)
+            android.util.Log.d("TaskRepository", "Converted tasks: ${tasks.size}")
             Result.success(tasks)
         } catch (e: Exception) {
+            android.util.Log.e("TaskRepository", "Error in getAllTasks", e)
             Result.failure(e)
         }
     }
@@ -51,36 +66,42 @@ class TaskRepository {
     // READ - Get tasks by status
     suspend fun getTasksByStatus(status: TaskStatus): Result<List<Task>> {
         return try {
+            android.util.Log.d("TaskRepository", "Filtering tasks by status: $status")
             val tasks = when (status) {
                 TaskStatus.COMPLETED -> {
-                    getUserTasksCollection()
-                        .whereEqualTo("is_completed", true)
-                        .orderBy("completed_date", Query.Direction.DESCENDING)
+                    val snapshot = getUserTasksCollection()
+                        .whereEqualTo("completed", true)
                         .get()
                         .await()
-                        .toObjects(Task::class.java)
+                    android.util.Log.d("TaskRepository", "Completed tasks query returned ${snapshot.size()} documents")
+                    snapshot.toObjects(Task::class.java)
                 }
                 TaskStatus.PENDING -> {
-                    getUserTasksCollection()
-                        .whereEqualTo("is_completed", false)
-                        .orderBy("due_date", Query.Direction.ASCENDING)
+                    val allTasks = getUserTasksCollection()
+                        .whereEqualTo("completed", false)
                         .get()
                         .await()
                         .toObjects(Task::class.java)
-                        .filter { !it.isOverdue() }
+                    android.util.Log.d("TaskRepository", "Non-completed tasks: ${allTasks.size}")
+                    val pendingTasks = allTasks.filter { !it.isOverdue() }
+                    android.util.Log.d("TaskRepository", "Pending tasks after filter: ${pendingTasks.size}")
+                    pendingTasks
                 }
                 TaskStatus.OVERDUE -> {
-                    getUserTasksCollection()
-                        .whereEqualTo("is_completed", false)
-                        .orderBy("due_date", Query.Direction.ASCENDING)
+                    val allTasks = getUserTasksCollection()
+                        .whereEqualTo("completed", false)
                         .get()
                         .await()
                         .toObjects(Task::class.java)
-                        .filter { it.isOverdue() }
+                    android.util.Log.d("TaskRepository", "Non-completed tasks: ${allTasks.size}")
+                    val overdueTasks = allTasks.filter { it.isOverdue() }
+                    android.util.Log.d("TaskRepository", "Overdue tasks after filter: ${overdueTasks.size}")
+                    overdueTasks
                 }
             }
             Result.success(tasks)
         } catch (e: Exception) {
+            android.util.Log.e("TaskRepository", "Error filtering tasks by status: $status", e)
             Result.failure(e)
         }
     }
@@ -89,9 +110,9 @@ class TaskRepository {
     suspend fun getTasksByDateRange(startDate: Date, endDate: Date): Result<List<Task>> {
         return try {
             val snapshot = getUserTasksCollection()
-                .whereGreaterThanOrEqualTo("due_date", Timestamp(startDate))
-                .whereLessThanOrEqualTo("due_date", Timestamp(endDate))
-                .orderBy("due_date", Query.Direction.ASCENDING)
+                .whereGreaterThanOrEqualTo("dueDate", Timestamp(startDate))
+                .whereLessThanOrEqualTo("dueDate", Timestamp(endDate))
+                .orderBy("dueDate", Query.Direction.ASCENDING)
                 .get()
                 .await()
 
@@ -124,13 +145,13 @@ class TaskRepository {
 
             request.name?.let { updates["name"] = it }
             request.details?.let { updates["details"] = it }
-            request.dueDate?.let { updates["due_date"] = Timestamp(it) }
+            request.dueDate?.let { updates["dueDate"] = Timestamp(it) }
             request.isCompleted?.let {
-                updates["is_completed"] = it
+                updates["completed"] = it
                 if (it) {
-                    updates["completed_date"] = Timestamp.now()
+                    updates["completedDate"] = Timestamp.now()
                 } else {
-                    updates["completed_date"] = com.google.firebase.firestore.FieldValue.delete()
+                    updates["completedDate"] = com.google.firebase.firestore.FieldValue.delete()
                 }
             }
 
@@ -159,8 +180,8 @@ class TaskRepository {
                 ?: return Result.failure(Exception("Task not found"))
 
             val updates = mapOf<String, Any?>(
-                "is_completed" to !task.isCompleted,
-                "completed_date" to if (!task.isCompleted) Timestamp.now() else com.google.firebase.firestore.FieldValue.delete()
+                "completed" to !task.isCompleted,
+                "completedDate" to if (!task.isCompleted) Timestamp.now() else com.google.firebase.firestore.FieldValue.delete()
             )
 
             getUserTasksCollection()

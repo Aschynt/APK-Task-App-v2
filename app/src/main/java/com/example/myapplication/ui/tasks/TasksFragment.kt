@@ -20,20 +20,22 @@ class TasksFragment : Fragment() {
 
     private var _binding: FragmentTasksBinding? = null
     private val binding get() = _binding!!
-    
+
     private lateinit var tasksViewModel: TasksViewModel
     private lateinit var taskAdapter: TaskAdapter
-    
+
     // Activity result launcher for add/edit task
     private val addEditTaskLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        android.util.Log.d("TasksFragment", "Activity result received: ${result.resultCode}")
         if (result.resultCode == Activity.RESULT_OK) {
+            android.util.Log.d("TasksFragment", "Task added/edited successfully, refreshing list")
             // Refresh the task list after adding/editing
             tasksViewModel.refresh()
         }
     }
-    
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -62,7 +64,7 @@ class TasksFragment : Fragment() {
                 onTaskLongClick(task)
             }
         )
-        
+
         binding.recyclerViewTasks.apply {
             adapter = taskAdapter
             layoutManager = LinearLayoutManager(requireContext())
@@ -83,7 +85,7 @@ class TasksFragment : Fragment() {
                 }
             }
         }
-        
+
         // Retry button
         binding.buttonRetry.setOnClickListener {
             tasksViewModel.refresh()
@@ -96,18 +98,18 @@ class TasksFragment : Fragment() {
             taskAdapter.submitList(tasks)
             updateEmptyState(tasks.isEmpty() && !(tasksViewModel.isLoading.value ?: false))
         }
-        
+
         // Observe loading state
         tasksViewModel.isLoading.observe(viewLifecycleOwner) { isLoading ->
             binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
-            
+
             // Hide other states when loading
             if (isLoading) {
                 binding.layoutEmptyState.visibility = View.GONE
                 binding.layoutErrorState.visibility = View.GONE
             }
         }
-        
+
         // Observe errors
         tasksViewModel.error.observe(viewLifecycleOwner) { error ->
             if (error != null) {
@@ -117,7 +119,7 @@ class TasksFragment : Fragment() {
                 binding.layoutErrorState.visibility = View.GONE
             }
         }
-        
+
         // Observe task stats (optional - for future use)
         tasksViewModel.taskStats.observe(viewLifecycleOwner) { stats ->
             // You can use these stats later for dashboard or statistics
@@ -127,7 +129,7 @@ class TasksFragment : Fragment() {
     private fun updateEmptyState(isEmpty: Boolean) {
         binding.layoutEmptyState.visibility = if (isEmpty) View.VISIBLE else View.GONE
         binding.recyclerViewTasks.visibility = if (isEmpty) View.GONE else View.VISIBLE
-        
+
         // Update empty state message based on current filter
         val message = when {
             binding.chipPending.isChecked -> "No pending tasks"
@@ -147,14 +149,14 @@ class TasksFragment : Fragment() {
 
     private fun onTaskClick(task: Task) {
         // Open task for editing
-        val intent = AddEditTaskActivity.newEditIntent(requireContext(), task)
+        val intent = AddEditTaskActivity.newEditIntent(requireContext(), task.id)
         addEditTaskLauncher.launch(intent)
     }
 
     private fun onTaskToggle(task: Task) {
         // Toggle task completion
         tasksViewModel.toggleTaskCompletion(task.id)
-        
+
         val message = if (task.isCompleted) "Task marked as pending" else "Task completed!"
         Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
     }

@@ -16,19 +16,19 @@ data class Task(
     @PropertyName("details")
     val details: String = "",
 
-    @PropertyName("due_date")
+    @PropertyName("dueDate")
     val dueDate: Timestamp = Timestamp.now(),
 
-    @PropertyName("is_completed")
+    @PropertyName("completed")
     val isCompleted: Boolean = false,
 
-    @PropertyName("completed_date")
+    @PropertyName("completedDate")
     val completedDate: Timestamp? = null,
 
-    @PropertyName("user_id")
+    @PropertyName("userId")
     val userId: String = "",
 
-    @PropertyName("created_date")
+    @PropertyName("createdDate")
     val createdDate: Timestamp = Timestamp.now()
 ) : Serializable {
     // No-argument constructor required for Firestore

@@ -26,22 +26,21 @@ class AddEditTaskActivity : AppCompatActivity() {
     private lateinit var binding: ActivityAddEditTaskBinding
     private val repository = TaskRepository()
     private val auth = FirebaseAuth.getInstance()
-    
+
     private var selectedDate: Date? = null
     private var taskToEdit: Task? = null
     private var isEditMode = false
-    
+
     companion object {
         const val EXTRA_TASK_ID = "task_id"
-        const val EXTRA_TASK = "task"
-        
+
         fun newIntent(context: Context): Intent {
             return Intent(context, AddEditTaskActivity::class.java)
         }
-        
-        fun newEditIntent(context: Context, task: Task): Intent {
+
+        fun newEditIntent(context: Context, taskId: String): Intent {
             return Intent(context, AddEditTaskActivity::class.java).apply {
-                putExtra(EXTRA_TASK, task)
+                putExtra(EXTRA_TASK_ID, taskId)
             }
         }
     }
@@ -73,11 +72,12 @@ class AddEditTaskActivity : AppCompatActivity() {
 
     private fun handleIntent() {
         // Check if we're in edit mode
-        taskToEdit = intent.getSerializableExtra(EXTRA_TASK) as? Task
-        
-        if (taskToEdit != null) {
+        val taskId = intent.getStringExtra(EXTRA_TASK_ID)
+
+        if (taskId != null) {
             isEditMode = true
-            setupEditMode(taskToEdit!!)
+            setupEditMode()
+            loadTaskForEditing(taskId)
         } else {
             isEditMode = false
             setupAddMode()
@@ -89,11 +89,35 @@ class AddEditTaskActivity : AppCompatActivity() {
         binding.btnSave.text = "Save Task"
     }
 
-    private fun setupEditMode(task: Task) {
+    private fun setupEditMode() {
         binding.toolbar.title = "Edit Task"
         binding.btnSave.text = "Update Task"
-        
-        // Pre-populate form with task data
+    }
+
+    private fun loadTaskForEditing(taskId: String) {
+        showLoading(true)
+
+        lifecycleScope.launch {
+            val result = repository.getTaskById(taskId)
+            showLoading(false)
+
+            if (result.isSuccess) {
+                val task = result.getOrNull()
+                if (task != null) {
+                    taskToEdit = task
+                    populateForm(task)
+                } else {
+                    showError("Task not found")
+                    finish()
+                }
+            } else {
+                showError("Failed to load task: ${result.exceptionOrNull()?.message}")
+                finish()
+            }
+        }
+    }
+
+    private fun populateForm(task: Task) {
         binding.etTaskName.setText(task.name)
         binding.etTaskDetails.setText(task.details)
         selectedDate = task.getDueDateAsDate()
@@ -104,11 +128,11 @@ class AddEditTaskActivity : AppCompatActivity() {
         binding.btnSelectDate.setOnClickListener {
             showDatePicker()
         }
-        
+
         binding.btnCancel.setOnClickListener {
             finish()
         }
-        
+
         binding.btnSave.setOnClickListener {
             if (validateForm()) {
                 saveTask()
@@ -119,7 +143,7 @@ class AddEditTaskActivity : AppCompatActivity() {
     private fun showDatePicker() {
         val calendar = Calendar.getInstance()
         selectedDate?.let { calendar.time = it }
-        
+
         val datePickerDialog = DatePickerDialog(
             this,
             { _, year, month, dayOfMonth ->
@@ -132,7 +156,7 @@ class AddEditTaskActivity : AppCompatActivity() {
             calendar.get(Calendar.MONTH),
             calendar.get(Calendar.DAY_OF_MONTH)
         )
-        
+
         // Don't allow selecting dates in the past
         datePickerDialog.datePicker.minDate = System.currentTimeMillis()
         datePickerDialog.show()
@@ -143,7 +167,7 @@ class AddEditTaskActivity : AppCompatActivity() {
             val dateFormat = SimpleDateFormat("EEEE, MMMM dd, yyyy", Locale.getDefault())
             binding.tvSelectedDate.text = dateFormat.format(date)
             binding.tvSelectedDate.visibility = View.VISIBLE
-            
+
             // Update button text
             val shortFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
             binding.btnSelectDate.text = "Due: ${shortFormat.format(date)}"
@@ -152,11 +176,11 @@ class AddEditTaskActivity : AppCompatActivity() {
 
     private fun validateForm(): Boolean {
         var isValid = true
-        
+
         // Clear previous errors
         binding.tilTaskName.error = null
         binding.tvErrorMessage.visibility = View.GONE
-        
+
         // Validate task name
         val taskName = binding.etTaskName.text.toString().trim()
         if (taskName.isEmpty()) {
@@ -166,7 +190,7 @@ class AddEditTaskActivity : AppCompatActivity() {
             binding.tilTaskName.error = "Task name must be at least 3 characters"
             isValid = false
         }
-        
+
         // Validate due date
         if (selectedDate == null) {
             showError("Please select a due date")
@@ -178,13 +202,13 @@ class AddEditTaskActivity : AppCompatActivity() {
             today.set(Calendar.MINUTE, 0)
             today.set(Calendar.SECOND, 0)
             today.set(Calendar.MILLISECOND, 0)
-            
+
             if (selectedDate!!.before(today.time)) {
                 showError("Due date cannot be in the past")
                 isValid = false
             }
         }
-        
+
         return isValid
     }
 
@@ -192,9 +216,9 @@ class AddEditTaskActivity : AppCompatActivity() {
         val taskName = binding.etTaskName.text.toString().trim()
         val taskDetails = binding.etTaskDetails.text.toString().trim()
         val userId = auth.currentUser?.uid ?: return
-        
+
         showLoading(true)
-        
+
         lifecycleScope.launch {
             try {
                 val result = if (isEditMode && taskToEdit != null) {
@@ -215,13 +239,13 @@ class AddEditTaskActivity : AppCompatActivity() {
                     )
                     repository.createTask(createRequest)
                 }
-                
+
                 showLoading(false)
-                
+
                 if (result.isSuccess) {
                     val message = if (isEditMode) "Task updated successfully" else "Task created successfully"
                     Toast.makeText(this@AddEditTaskActivity, message, Toast.LENGTH_SHORT).show()
-                    
+
                     // Set result and finish
                     setResult(RESULT_OK)
                     finish()
@@ -229,7 +253,7 @@ class AddEditTaskActivity : AppCompatActivity() {
                     val error = result.exceptionOrNull()?.message ?: "Unknown error occurred"
                     showError(error)
                 }
-                
+
             } catch (e: Exception) {
                 showLoading(false)
                 showError("Error: ${e.message}")

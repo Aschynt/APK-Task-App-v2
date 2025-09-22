@@ -44,17 +44,22 @@ class TasksViewModel : ViewModel() {
 
     // Load all tasks
     fun loadAllTasks() {
+        android.util.Log.d("TasksViewModel", "loadAllTasks() called")
         _isLoading.value = true
         _error.value = null
 
         viewModelScope.launch {
             val result = repository.getAllTasks()
+            android.util.Log.d("TasksViewModel", "getAllTasks result: success=${result.isSuccess}, data size=${result.getOrNull()?.size}")
             _isLoading.value = false
 
             if (result.isSuccess) {
-                _tasks.value = result.getOrNull() ?: emptyList()
+                val tasks = result.getOrNull() ?: emptyList()
+                android.util.Log.d("TasksViewModel", "Setting tasks: ${tasks.map { "${it.name} - ${it.id}" }}")
+                _tasks.value = tasks
                 _currentFilter.value = null
             } else {
+                android.util.Log.e("TasksViewModel", "Error loading tasks: ${result.exceptionOrNull()?.message}")
                 _error.value = result.exceptionOrNull()?.message ?: "Failed to load tasks"
             }
         }
