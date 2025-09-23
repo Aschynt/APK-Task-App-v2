@@ -251,7 +251,131 @@ class TaskRepository {
         }
     }
 
-    // UTILITY - Get task statistics
+    // ENHANCED - Get tasks with filtering and sorting
+    suspend fun getTasksWithFilters(filters: TaskFilters): Result<List<Task>> {
+        return try {
+            android.util.Log.d("TaskRepository", "Getting tasks with filters: $filters")
+
+            // First apply status filter if specified
+            val baseQuery = getUserTasksCollection()
+            val tasks = if (filters.status != null) {
+                when (filters.status) {
+                    TaskStatus.COMPLETED -> {
+                        baseQuery.whereEqualTo("completed", true)
+                            .get()
+                            .await()
+                            .toObjects(Task::class.java)
+                    }
+                    TaskStatus.PENDING -> {
+                        baseQuery.whereEqualTo("completed", false)
+                            .get()
+                            .await()
+                            .toObjects(Task::class.java)
+                            .filter { !it.isOverdue() }
+                    }
+                    TaskStatus.OVERDUE -> {
+                        baseQuery.whereEqualTo("completed", false)
+                            .get()
+                            .await()
+                            .toObjects(Task::class.java)
+                            .filter { it.isOverdue() }
+                    }
+                }
+            } else {
+                // Get all tasks
+                baseQuery.get()
+                    .await()
+                    .toObjects(Task::class.java)
+            }
+
+            // Apply date filtering
+            val dateFilteredTasks = applyDateFilter(tasks, filters)
+
+            // Apply sorting
+            val sortedTasks = applySorting(dateFilteredTasks, filters.sortOption)
+
+            android.util.Log.d("TaskRepository", "Filtered and sorted tasks: ${sortedTasks.size}")
+            Result.success(sortedTasks)
+
+        } catch (e: Exception) {
+            android.util.Log.e("TaskRepository", "Error getting filtered tasks", e)
+            Result.failure(e)
+        }
+    }
+
+    private fun applyDateFilter(tasks: List<Task>, filters: TaskFilters): List<Task> {
+        val today = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+
+        return when (filters.dateFilter) {
+            DateFilter.ALL -> tasks
+
+            DateFilter.TODAY -> {
+                val endOfToday = today.clone() as java.util.Calendar
+                endOfToday.add(java.util.Calendar.DAY_OF_MONTH, 1)
+                tasks.filter { task ->
+                    val dueDate = task.getDueDateAsDate()
+                    dueDate.after(today.time) && dueDate.before(endOfToday.time)
+                }
+            }
+
+            DateFilter.THIS_WEEK -> {
+                val startOfWeek = today.clone() as java.util.Calendar
+                startOfWeek.set(java.util.Calendar.DAY_OF_WEEK, java.util.Calendar.SUNDAY)
+                val endOfWeek = startOfWeek.clone() as java.util.Calendar
+                endOfWeek.add(java.util.Calendar.WEEK_OF_YEAR, 1)
+
+                tasks.filter { task ->
+                    val dueDate = task.getDueDateAsDate()
+                    dueDate.after(startOfWeek.time) && dueDate.before(endOfWeek.time)
+                }
+            }
+
+            DateFilter.THIS_MONTH -> {
+                val startOfMonth = today.clone() as java.util.Calendar
+                startOfMonth.set(java.util.Calendar.DAY_OF_MONTH, 1)
+                val endOfMonth = startOfMonth.clone() as java.util.Calendar
+                endOfMonth.add(java.util.Calendar.MONTH, 1)
+
+                tasks.filter { task ->
+                    val dueDate = task.getDueDateAsDate()
+                    dueDate.after(startOfMonth.time) && dueDate.before(endOfMonth.time)
+                }
+            }
+
+            DateFilter.OVERDUE -> {
+                tasks.filter { task ->
+                    !task.isCompleted && task.getDueDateAsDate().before(today.time)
+                }
+            }
+
+            DateFilter.CUSTOM_RANGE -> {
+                if (filters.customStartDate != null && filters.customEndDate != null) {
+                    tasks.filter { task ->
+                        val dueDate = task.getDueDateAsDate()
+                        dueDate.after(filters.customStartDate) && dueDate.before(filters.customEndDate)
+                    }
+                } else {
+                    tasks
+                }
+            }
+        }
+    }
+
+    private fun applySorting(tasks: List<Task>, sortOption: SortOption): List<Task> {
+        return when (sortOption) {
+            SortOption.DUE_DATE_ASC -> tasks.sortedBy { it.getDueDateAsDate() }
+            SortOption.DUE_DATE_DESC -> tasks.sortedByDescending { it.getDueDateAsDate() }
+            SortOption.NAME_ASC -> tasks.sortedBy { it.name.lowercase() }
+            SortOption.NAME_DESC -> tasks.sortedByDescending { it.name.lowercase() }
+            SortOption.CREATED_DATE_ASC -> tasks.sortedBy { it.getCreatedDateAsDate() }
+            SortOption.CREATED_DATE_DESC -> tasks.sortedByDescending { it.getCreatedDateAsDate() }
+        }
+    }
     suspend fun getTaskStats(): Result<TaskStats> {
         return try {
             val allTasksResult = getAllTasks()

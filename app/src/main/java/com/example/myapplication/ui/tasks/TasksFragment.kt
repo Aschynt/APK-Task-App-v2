@@ -1,21 +1,27 @@
 package com.example.myapplication.ui.tasks
 
 import android.app.Activity
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.example.myapplication.data.DateFilter
+import com.example.myapplication.data.SortOption
 import com.example.myapplication.data.Task
+import com.example.myapplication.data.TaskFilters
 import com.example.myapplication.data.TaskStatus
 import com.example.myapplication.databinding.FragmentTasksBinding
 import com.google.firebase.auth.FirebaseAuth
+import java.util.*
 
 class TasksFragment : Fragment() {
 
@@ -24,6 +30,12 @@ class TasksFragment : Fragment() {
 
     private lateinit var tasksViewModel: TasksViewModel
     private lateinit var taskAdapter: TaskAdapter
+
+    // Current filters
+    private var currentDateFilter = DateFilter.ALL
+    private var currentSortOption = SortOption.DUE_DATE_ASC
+    private var customStartDate: Date? = null
+    private var customEndDate: Date? = null
 
     // Activity result launcher for add/edit task
     private val addEditTaskLauncher = registerForActivityResult(
@@ -48,9 +60,22 @@ class TasksFragment : Fragment() {
 
         setupRecyclerView()
         setupFilterChips()
+        setupDateFilter()
+        setupSortButton()
         observeViewModel()
 
+        // Initialize with default display
+        initializeDefaultView()
+
         return root
+    }
+
+    private fun initializeDefaultView() {
+        // Set default text for sort button (shortened)
+        binding.btnSort.text = "Sort: Due Date"
+
+        // Set default date filter
+        binding.dropdownDateFilter.setText(currentDateFilter.displayName, false)
     }
 
     private fun setupRecyclerView() {
@@ -74,23 +99,128 @@ class TasksFragment : Fragment() {
 
     private fun setupFilterChips() {
         binding.chipGroupFilters.setOnCheckedStateChangeListener { group, checkedIds ->
-            when {
-                binding.chipAll.isChecked -> tasksViewModel.loadAllTasks()
-                binding.chipPending.isChecked -> tasksViewModel.loadTasksByStatus(TaskStatus.PENDING)
-                binding.chipOverdue.isChecked -> tasksViewModel.loadTasksByStatus(TaskStatus.OVERDUE)
-                binding.chipCompleted.isChecked -> tasksViewModel.loadTasksByStatus(TaskStatus.COMPLETED)
+            val selectedStatus = when {
+                binding.chipAll.isChecked -> null
+                binding.chipPending.isChecked -> TaskStatus.PENDING
+                binding.chipOverdue.isChecked -> TaskStatus.OVERDUE
+                binding.chipCompleted.isChecked -> TaskStatus.COMPLETED
                 checkedIds.isEmpty() -> {
                     // If no chips are selected, default to "All"
                     binding.chipAll.isChecked = true
-                    tasksViewModel.loadAllTasks()
+                    null
                 }
+                else -> null
             }
+
+            // Apply filters with current settings
+            applyFilters(selectedStatus)
         }
 
         // Retry button
         binding.buttonRetry.setOnClickListener {
             tasksViewModel.refresh()
         }
+    }
+
+    private fun setupDateFilter() {
+        // Setup date filter dropdown
+        val dateFilterOptions = DateFilter.values().map { it.displayName }.toTypedArray()
+        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, dateFilterOptions)
+        binding.dropdownDateFilter.setAdapter(adapter)
+
+        binding.dropdownDateFilter.setOnItemClickListener { _, _, position, _ ->
+            val selectedDateFilter = DateFilter.values()[position]
+            onDateFilterSelected(selectedDateFilter)
+        }
+    }
+
+    private fun setupSortButton() {
+        binding.btnSort.setOnClickListener {
+            showSortDialog()
+        }
+    }
+
+    private fun applyFilters(status: TaskStatus?) {
+        val filters = TaskFilters(
+            status = status,
+            dateFilter = currentDateFilter,
+            customStartDate = customStartDate,
+            customEndDate = customEndDate,
+            sortOption = currentSortOption
+        )
+        tasksViewModel.loadTasksWithFilters(filters)
+    }
+
+    private fun onDateFilterSelected(dateFilter: DateFilter) {
+        when (dateFilter) {
+            DateFilter.CUSTOM_RANGE -> {
+                showDateRangePicker()
+            }
+            else -> {
+                currentDateFilter = dateFilter
+                customStartDate = null
+                customEndDate = null
+                applyFilters(getCurrentSelectedStatus())
+            }
+        }
+    }
+
+    private fun getCurrentSelectedStatus(): TaskStatus? {
+        return when {
+            binding.chipPending.isChecked -> TaskStatus.PENDING
+            binding.chipOverdue.isChecked -> TaskStatus.OVERDUE
+            binding.chipCompleted.isChecked -> TaskStatus.COMPLETED
+            else -> null
+        }
+    }
+
+    private fun showSortDialog() {
+        val sortOptions = SortOption.values().map { it.displayName }.toTypedArray()
+        val currentIndex = SortOption.values().indexOf(currentSortOption)
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Sort Tasks")
+            .setSingleChoiceItems(sortOptions, currentIndex) { dialog, which ->
+                currentSortOption = SortOption.values()[which]
+                // Use shortened text for button display
+                val shortName = when (currentSortOption) {
+                    SortOption.DUE_DATE_ASC -> "Due Date"
+                    SortOption.DUE_DATE_DESC -> "Due Date ↓"
+                    SortOption.NAME_ASC -> "Name A-Z"
+                    SortOption.NAME_DESC -> "Name Z-A"
+                    SortOption.CREATED_DATE_ASC -> "Oldest"
+                    SortOption.CREATED_DATE_DESC -> "Newest"
+                }
+                binding.btnSort.text = shortName
+                applyFilters(getCurrentSelectedStatus())
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showDateRangePicker() {
+        val calendar = Calendar.getInstance()
+
+        // Start date picker
+        DatePickerDialog(requireContext(), { _, startYear, startMonth, startDay ->
+            val startCalendar = Calendar.getInstance()
+            startCalendar.set(startYear, startMonth, startDay, 0, 0, 0)
+            customStartDate = startCalendar.time
+
+            // End date picker
+            DatePickerDialog(requireContext(), { _, endYear, endMonth, endDay ->
+                val endCalendar = Calendar.getInstance()
+                endCalendar.set(endYear, endMonth, endDay, 23, 59, 59)
+                customEndDate = endCalendar.time
+
+                currentDateFilter = DateFilter.CUSTOM_RANGE
+                binding.dropdownDateFilter.setText("Custom Range", false)
+                applyFilters(getCurrentSelectedStatus())
+
+            }, startYear, startMonth, startDay + 1).show()
+
+        }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show()
     }
 
     private fun observeViewModel() {

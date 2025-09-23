@@ -5,7 +5,10 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.CreateTaskRequest
+import com.example.myapplication.data.DateFilter
+import com.example.myapplication.data.SortOption
 import com.example.myapplication.data.Task
+import com.example.myapplication.data.TaskFilters
 import com.example.myapplication.data.TaskRepository
 import com.example.myapplication.data.TaskStats
 import com.example.myapplication.data.TaskStatus
@@ -37,50 +40,69 @@ class TasksViewModel : ViewModel() {
     private val _currentFilter = MutableLiveData<TaskStatus?>()
     val currentFilter: LiveData<TaskStatus?> = _currentFilter
 
+    // Current filters and sorting
+    private val _currentFilters = MutableLiveData<TaskFilters>()
+    val currentFilters: LiveData<TaskFilters> = _currentFilters
+
     init {
+        _currentFilters.value = TaskFilters() // Default filters
         loadAllTasks()
         loadTaskStats()
     }
 
-    // Load all tasks
-    fun loadAllTasks() {
-        android.util.Log.d("TasksViewModel", "loadAllTasks() called")
+    // Load tasks with enhanced filters
+    fun loadTasksWithFilters(filters: TaskFilters) {
+        android.util.Log.d("TasksViewModel", "Loading tasks with filters: $filters")
         _isLoading.value = true
         _error.value = null
 
         viewModelScope.launch {
-            val result = repository.getAllTasks()
-            android.util.Log.d("TasksViewModel", "getAllTasks result: success=${result.isSuccess}, data size=${result.getOrNull()?.size}")
+            val result = repository.getTasksWithFilters(filters)
             _isLoading.value = false
 
             if (result.isSuccess) {
                 val tasks = result.getOrNull() ?: emptyList()
-                android.util.Log.d("TasksViewModel", "Setting tasks: ${tasks.map { "${it.name} - ${it.id}" }}")
+                android.util.Log.d("TasksViewModel", "Loaded ${tasks.size} filtered tasks")
                 _tasks.value = tasks
-                _currentFilter.value = null
+                _currentFilters.value = filters
+                // Update legacy filter for compatibility
+                _currentFilter.value = filters.status
             } else {
-                android.util.Log.e("TasksViewModel", "Error loading tasks: ${result.exceptionOrNull()?.message}")
+                android.util.Log.e("TasksViewModel", "Error loading filtered tasks: ${result.exceptionOrNull()?.message}")
                 _error.value = result.exceptionOrNull()?.message ?: "Failed to load tasks"
             }
         }
     }
 
-    // Load tasks by status
+    // Update sorting
+    fun updateSorting(sortOption: SortOption) {
+        val currentFilters = _currentFilters.value ?: TaskFilters()
+        val newFilters = currentFilters.copy(sortOption = sortOption)
+        loadTasksWithFilters(newFilters)
+    }
+
+    // Update date filter
+    fun updateDateFilter(dateFilter: DateFilter, startDate: Date? = null, endDate: Date? = null) {
+        val currentFilters = _currentFilters.value ?: TaskFilters()
+        val newFilters = currentFilters.copy(
+            dateFilter = dateFilter,
+            customStartDate = startDate,
+            customEndDate = endDate
+        )
+        loadTasksWithFilters(newFilters)
+    }
+
+    // Legacy methods - updated to use new filtering system
+    fun loadAllTasks() {
+        android.util.Log.d("TasksViewModel", "loadAllTasks() called")
+        val filters = TaskFilters(status = null)
+        loadTasksWithFilters(filters)
+    }
+
     fun loadTasksByStatus(status: TaskStatus) {
-        _isLoading.value = true
-        _error.value = null
-
-        viewModelScope.launch {
-            val result = repository.getTasksByStatus(status)
-            _isLoading.value = false
-
-            if (result.isSuccess) {
-                _tasks.value = result.getOrNull() ?: emptyList()
-                _currentFilter.value = status
-            } else {
-                _error.value = result.exceptionOrNull()?.message ?: "Failed to load tasks"
-            }
-        }
+        val currentFilters = _currentFilters.value ?: TaskFilters()
+        val newFilters = currentFilters.copy(status = status)
+        loadTasksWithFilters(newFilters)
     }
 
     // Load tasks for date range
@@ -195,14 +217,10 @@ class TasksViewModel : ViewModel() {
         }
     }
 
-    // Refresh current view based on current filter
+    // Refresh current view based on current filters
     private fun refreshCurrentView() {
-        val filter = _currentFilter.value
-        if (filter != null) {
-            loadTasksByStatus(filter)
-        } else {
-            loadAllTasks()
-        }
+        val currentFilters = _currentFilters.value ?: TaskFilters()
+        loadTasksWithFilters(currentFilters)
     }
 
     // Clear error message
@@ -212,7 +230,8 @@ class TasksViewModel : ViewModel() {
 
     // Refresh data
     fun refresh() {
-        refreshCurrentView()
+        val currentFilters = _currentFilters.value ?: TaskFilters()
+        loadTasksWithFilters(currentFilters)
         loadTaskStats()
     }
 }
