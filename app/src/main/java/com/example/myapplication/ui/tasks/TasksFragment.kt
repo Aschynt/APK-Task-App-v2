@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.DatePickerDialog
 import android.content.Intent
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -62,6 +64,7 @@ class TasksFragment : Fragment() {
         setupFilterChips()
         setupDateFilter()
         setupSortButton()
+        setupSearchFunctionality()
         observeViewModel()
 
         // Initialize with default display
@@ -148,7 +151,14 @@ class TasksFragment : Fragment() {
             customEndDate = customEndDate,
             sortOption = currentSortOption
         )
-        tasksViewModel.loadTasksWithFilters(filters)
+
+        // If search is active, search with filters, otherwise just load with filters
+        if (tasksViewModel.isSearching()) {
+            val currentQuery = tasksViewModel.searchQuery.value ?: ""
+            tasksViewModel.searchTasks(currentQuery)
+        } else {
+            tasksViewModel.loadTasksWithFilters(filters)
+        }
     }
 
     private fun onDateFilterSelected(dateFilter: DateFilter) {
@@ -223,6 +233,70 @@ class TasksFragment : Fragment() {
         }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show()
     }
 
+    private fun setupSearchFunctionality() {
+        // Search toggle button
+        binding.btnToggleSearch.setOnClickListener {
+            toggleSearchVisibility()
+        }
+
+        // Search text change listener with debounce
+        binding.searchEditText.addTextChangedListener(object : TextWatcher {
+            private var searchRunnable: Runnable? = null
+
+            override fun afterTextChanged(s: Editable?) {
+                searchRunnable?.let { binding.searchEditText.removeCallbacks(it) }
+                searchRunnable = Runnable {
+                    val query = s.toString().trim()
+                    tasksViewModel.searchTasks(query)
+                }
+                binding.searchEditText.postDelayed(searchRunnable, 300) // 300ms debounce
+            }
+
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
+
+        // Clear search button
+        binding.btnClearSearch.setOnClickListener {
+            binding.searchEditText.text?.clear()
+            tasksViewModel.clearSearch()
+        }
+
+        // Handle search submit
+        binding.searchEditText.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                val query = binding.searchEditText.text.toString().trim()
+                tasksViewModel.searchTasks(query)
+                // Hide keyboard
+                val imm = requireContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                imm.hideSoftInputFromWindow(binding.searchEditText.windowToken, 0)
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    private fun toggleSearchVisibility() {
+        val isVisible = binding.searchCard.visibility == View.VISIBLE
+
+        if (isVisible) {
+            // Hide search
+            binding.searchCard.visibility = View.GONE
+            binding.btnToggleSearch.text = "Search"
+            binding.searchEditText.text?.clear()
+            tasksViewModel.clearSearch()
+        } else {
+            // Show search
+            binding.searchCard.visibility = View.VISIBLE
+            binding.btnToggleSearch.text = "Hide"
+            binding.searchEditText.requestFocus()
+            // Show keyboard
+            val imm = requireContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            imm.showSoftInput(binding.searchEditText, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
+
     private fun observeViewModel() {
         // Observe tasks
         tasksViewModel.tasks.observe(viewLifecycleOwner) { tasks ->
@@ -258,6 +332,26 @@ class TasksFragment : Fragment() {
         // Observe task stats (optional - for future use)
         tasksViewModel.taskStats.observe(viewLifecycleOwner) { stats ->
             // You can use these stats later for dashboard or statistics
+        }
+
+        // Observe search state
+        tasksViewModel.isSearchActive.observe(viewLifecycleOwner) { isActive ->
+            updateEmptyStateForSearch(isActive)
+        }
+
+        tasksViewModel.searchQuery.observe(viewLifecycleOwner) { query ->
+            // Update UI based on search query if needed
+        }
+    }
+
+    private fun updateEmptyStateForSearch(isSearchActive: Boolean) {
+        val isEmpty = tasksViewModel.tasks.value?.isEmpty() == true &&
+                !(tasksViewModel.isLoading.value ?: false)
+
+        if (isEmpty && isSearchActive) {
+            binding.textEmptyState.text = "No tasks found for your search"
+        } else {
+            updateEmptyState(isEmpty)
         }
     }
 

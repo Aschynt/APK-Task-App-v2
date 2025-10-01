@@ -44,8 +44,17 @@ class TasksViewModel : ViewModel() {
     private val _currentFilters = MutableLiveData<TaskFilters>()
     val currentFilters: LiveData<TaskFilters> = _currentFilters
 
+    // Search state
+    private val _searchQuery = MutableLiveData<String>()
+    val searchQuery: LiveData<String> = _searchQuery
+
+    private val _isSearchActive = MutableLiveData<Boolean>()
+    val isSearchActive: LiveData<Boolean> = _isSearchActive
+
     init {
         _currentFilters.value = TaskFilters() // Default filters
+        _searchQuery.value = ""
+        _isSearchActive.value = false
         loadAllTasks()
         loadTaskStats()
     }
@@ -105,7 +114,42 @@ class TasksViewModel : ViewModel() {
         loadTasksWithFilters(newFilters)
     }
 
-    // Load tasks for date range
+    // Search functionality
+    fun searchTasks(query: String) {
+        android.util.Log.d("TasksViewModel", "Search query: '$query'")
+        _searchQuery.value = query
+        _isSearchActive.value = query.isNotBlank()
+
+        _isLoading.value = true
+        _error.value = null
+
+        viewModelScope.launch {
+            val currentFilters = _currentFilters.value ?: TaskFilters()
+            val result = repository.searchTasksWithFilters(query, currentFilters)
+            _isLoading.value = false
+
+            if (result.isSuccess) {
+                val tasks = result.getOrNull() ?: emptyList()
+                android.util.Log.d("TasksViewModel", "Search returned ${tasks.size} tasks")
+                _tasks.value = tasks
+            } else {
+                android.util.Log.e("TasksViewModel", "Error searching tasks: ${result.exceptionOrNull()?.message}")
+                _error.value = result.exceptionOrNull()?.message ?: "Failed to search tasks"
+            }
+        }
+    }
+
+    // Clear search
+    fun clearSearch() {
+        _searchQuery.value = ""
+        _isSearchActive.value = false
+        // Reload tasks with current filters
+        val currentFilters = _currentFilters.value ?: TaskFilters()
+        loadTasksWithFilters(currentFilters)
+    }
+
+    // Check if search is active
+    fun isSearching(): Boolean = _isSearchActive.value == true
     fun loadTasksByDateRange(startDate: Date, endDate: Date) {
         _isLoading.value = true
         _error.value = null
@@ -181,24 +225,6 @@ class TasksViewModel : ViewModel() {
                 loadTaskStats()
             } else {
                 _error.value = result.exceptionOrNull()?.message ?: "Failed to delete task"
-            }
-        }
-    }
-
-    // Search tasks
-    fun searchTasks(query: String) {
-        _isLoading.value = true
-        _error.value = null
-
-        viewModelScope.launch {
-            val result = repository.searchTasks(query)
-            _isLoading.value = false
-
-            if (result.isSuccess) {
-                _tasks.value = result.getOrNull() ?: emptyList()
-                _currentFilter.value = null
-            } else {
-                _error.value = result.exceptionOrNull()?.message ?: "Failed to search tasks"
             }
         }
     }

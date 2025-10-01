@@ -251,6 +251,38 @@ class TaskRepository {
         }
     }
 
+    // UTILITY - Search tasks by name or details with filters
+    suspend fun searchTasksWithFilters(query: String, filters: TaskFilters): Result<List<Task>> {
+        return try {
+            android.util.Log.d("TaskRepository", "Searching tasks with query: '$query' and filters: $filters")
+
+            if (query.isBlank()) {
+                // If query is empty, return filtered tasks
+                return getTasksWithFilters(filters)
+            }
+
+            // Get all tasks first with current filters
+            val filteredTasksResult = getTasksWithFilters(filters)
+            if (filteredTasksResult.isFailure) {
+                return filteredTasksResult
+            }
+
+            val filteredTasks = filteredTasksResult.getOrNull() ?: emptyList()
+
+            // Apply search query to filtered results
+            val searchResults = filteredTasks.filter { task ->
+                task.name.contains(query, ignoreCase = true) ||
+                        task.details.contains(query, ignoreCase = true)
+            }
+
+            android.util.Log.d("TaskRepository", "Search returned ${searchResults.size} results")
+            Result.success(searchResults)
+        } catch (e: Exception) {
+            android.util.Log.e("TaskRepository", "Error searching tasks", e)
+            Result.failure(e)
+        }
+    }
+
     // ENHANCED - Get tasks with filtering and sorting
     suspend fun getTasksWithFilters(filters: TaskFilters): Result<List<Task>> {
         return try {
